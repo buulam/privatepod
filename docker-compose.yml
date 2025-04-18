@@ -1,0 +1,14 @@
+version: '3'
+
+services:
+  privatepod:
+    build: .
+    container_name: privatepod
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./config:/app/config
+    environment:
+      - PORT=3000
+    restart: unless-stopped

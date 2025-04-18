@@ -1,0 +1,34 @@
+# Node modules
+node_modules
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Directory for uploaded files (will be mounted as volume)
+uploads/*
+
+# Config directory (will be mounted as volume)
+config/*
+
+# Git files
+.git
+.gitignore
+
+# Docker files
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# Editor directories and files
+.idea
+.vscode
+*.swp
+*.swo

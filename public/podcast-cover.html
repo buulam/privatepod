@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Podcast Cover</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-color: #f5f5f5;
+    }
+    .cover {
+      width: 1400px;
+      height: 1400px;
+      background-color: #3498db;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-family: Arial, sans-serif;
+      position: relative;
+      overflow: hidden;
+    }
+    .circle {
+      position: absolute;
+      border-radius: 50%;
+    }
+    .circle-1 {
+      width: 800px;
+      height: 800px;
+      background-color: #2980b9;
+    }
+    .circle-2 {
+      width: 600px;
+      height: 600px;
+      background-color: #3498db;
+    }
+    .microphone {
+      position: relative;
+      z-index: 10;
+      margin-bottom: 50px;
+    }
+    .mic-head {
+      width: 120px;
+      height: 250px;
+      background-color: white;
+      border-radius: 60px;
+      margin: 0 auto;
+    }
+    .mic-stand {
+      width: 30px;
+      height: 150px;
+      background-color: white;
+      margin: 0 auto;
+    }
+    .mic-base {
+      width: 200px;
+      height: 30px;
+      background-color: white;
+      border-radius: 15px;
+      margin: 0 auto;
+    }
+    .title {
+      font-size: 120px;
+      font-weight: bold;
+      margin: 20px 0;
+      text-align: center;
+      z-index: 10;
+    }
+    .subtitle {
+      font-size: 60px;
+      text-align: center;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div class="cover">
+    <div class="circle circle-1"></div>
+    <div class="circle circle-2"></div>
+    
+    <div class="microphone">
+      <div class="mic-head"></div>
+      <div class="mic-stand"></div>
+      <div class="mic-base"></div>
+    </div>
+    
+    <div class="title">PRIVATEPOD</div>
+    <div class="subtitle">Your Private Podcast</div>
+  </div>
+</body>
+</html>
