@@ -27,6 +27,9 @@ config/*
 Dockerfile
 docker-compose.yml
 
+# Test files
+test/
+
 # Editor directories and files
 .idea
 .vscode

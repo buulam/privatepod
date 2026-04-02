@@ -61,6 +61,11 @@ This is a single-file Express 5 app (`index.js`) with a vanilla HTML/JS frontend
 - Fixture files in `test/fixtures/` (minimal valid MP3 and JPEG)
 - Tests use `jest.resetModules()` in `beforeEach` to get a fresh app instance per test
 
+**Docker:**
+- `Dockerfile` uses `npm ci --omit=dev` — only production dependencies in the image
+- `.dockerignore` excludes `test/`, git files, and Docker files from the build context
+- When making changes, always check if `Dockerfile` or `.dockerignore` need updating (e.g., new dependencies, new directories, new env vars in `docker-compose.yml`, new file types that should be excluded from the image)
+
 ## Key Design Notes
 
 - Episode IDs are `Date.now()` timestamps as strings
