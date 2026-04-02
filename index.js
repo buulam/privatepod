@@ -5,6 +5,8 @@ const path = require('path');
 const xml = require('xml');
 const cors = require('cors');
 const crypto = require('crypto');
+const swaggerUi = require('swagger-ui-express');
+const YAML = require('yamljs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,6 +35,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
+
+// Swagger API docs
+const swaggerDocument = YAML.load(path.join(__dirname, 'openapi.yaml'));
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Set up multer for file uploads
 const storage = multer.diskStorage({
