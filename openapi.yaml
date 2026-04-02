@@ -1,0 +1,325 @@
+openapi: "3.0.3"
+
+info:
+  title: PrivatePod API
+  version: "1.0.0"
+  description: API for managing a private self-hosted podcast via PrivatePod.
+
+servers:
+  - url: http://localhost:3000
+
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    Episode:
+      type: object
+      required:
+        - id
+        - title
+        - description
+        - pubDate
+        - audioUrl
+        - duration
+        - fileSize
+      properties:
+        id:
+          type: string
+          description: Unique episode identifier (timestamp-based).
+          example: "1711929600000"
+        title:
+          type: string
+          example: My First Episode
+        description:
+          type: string
+          example: A short description of the episode.
+        pubDate:
+          type: string
+          format: date-time
+          description: Publication date in ISO 8601 format.
+          example: "2026-04-01T12:00:00.000Z"
+        audioUrl:
+          type: string
+          example: /uploads/1711929600000.mp3
+        duration:
+          type: string
+          description: Duration in HH:MM:SS format.
+          example: "00:00:00"
+        fileSize:
+          type: integer
+          description: Audio file size in bytes.
+          example: 5242880
+        imageUrl:
+          type: string
+          description: Episode-specific cover image URL (present only when an image was uploaded).
+          example: /uploads/1711929600001.jpg
+
+    Settings:
+      type: object
+      properties:
+        title:
+          type: string
+          example: My Private Podcast
+        description:
+          type: string
+          example: A private podcast hosted with PrivatePod
+        author:
+          type: string
+          example: Podcast Author
+        email:
+          type: string
+          format: email
+          example: author@example.com
+        language:
+          type: string
+          example: en-us
+        copyright:
+          type: string
+          example: Copyright 2026
+        link:
+          type: string
+          format: uri
+          example: http://localhost:3000
+        imageUrl:
+          type: string
+          example: http://localhost:3000/podcast-cover.jpg
+        category:
+          type: string
+          example: Technology
+
+    FullConfig:
+      description: Full podcast configuration including episodes array.
+      allOf:
+        - $ref: "#/components/schemas/Settings"
+        - type: object
+          properties:
+            episodes:
+              type: array
+              items:
+                $ref: "#/components/schemas/Episode"
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+
+paths:
+  /api/v1/episodes:
+    post:
+      summary: Create episode (programmatic)
+      description: Upload a new episode with an audio file and optional cover image. Requires API key authentication.
+      operationId: createEpisodeProgrammatic
+      security:
+        - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - audio
+              properties:
+                audio:
+                  type: string
+                  format: binary
+                  description: MP3 audio file (audio/mpeg).
+                image:
+                  type: string
+                  format: binary
+                  description: Optional cover image (image/jpeg or image/png).
+                title:
+                  type: string
+                  description: Episode title. Defaults to the audio filename if omitted.
+                description:
+                  type: string
+                  description: Episode description.
+                pubDate:
+                  type: string
+                  format: date-time
+                  description: Publication date in ISO 8601 format. Defaults to now.
+      responses:
+        "201":
+          description: Episode created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Episode"
+        "400":
+          description: No audio file uploaded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing X-API-Key header.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Invalid API key.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: API key not configured on the server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/episodes:
+    get:
+      summary: List all episodes
+      operationId: listEpisodes
+      responses:
+        "200":
+          description: Array of all episodes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Episode"
+
+    post:
+      summary: Upload episode (web UI)
+      description: Upload a new episode via the web interface. Title is required.
+      operationId: createEpisodeWeb
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - audio
+                - title
+              properties:
+                audio:
+                  type: string
+                  format: binary
+                  description: MP3 audio file (audio/mpeg).
+                title:
+                  type: string
+                  description: Episode title.
+                description:
+                  type: string
+                  description: Episode description.
+                pubDate:
+                  type: string
+                  format: date-time
+                  description: Publication date in ISO 8601 format. Defaults to now.
+      responses:
+        "201":
+          description: Episode created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Episode"
+        "400":
+          description: Missing audio file or title.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/episodes/{id}:
+    delete:
+      summary: Delete episode
+      operationId: deleteEpisode
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Episode ID.
+      responses:
+        "200":
+          description: Episode deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+        "404":
+          description: Episode not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/settings:
+    get:
+      summary: Get podcast settings
+      operationId: getSettings
+      responses:
+        "200":
+          description: Current podcast settings (excludes episodes).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+
+    put:
+      summary: Update podcast settings
+      operationId: updateSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                author:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                language:
+                  type: string
+                copyright:
+                  type: string
+                link:
+                  type: string
+                  format: uri
+                imageUrl:
+                  type: string
+                category:
+                  type: string
+      responses:
+        "200":
+          description: Full config object including episodes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FullConfig"
+
+  /feed.xml:
+    get:
+      summary: RSS podcast feed
+      operationId: getFeed
+      responses:
+        "200":
+          description: iTunes-compatible RSS feed.
+          content:
+            application/rss+xml:
+              schema:
+                type: string

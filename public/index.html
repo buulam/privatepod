@@ -320,8 +320,7 @@
     // Load podcast settings
     async function loadSettings() {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/episodes`);
-        // We'll use the episodes endpoint to get the podcast settings since we don't have a dedicated endpoint
+        const response = await fetch(`${API_BASE_URL}/api/settings`);
         podcastSettings = await response.json();
         
         // Set feed URL

@@ -96,6 +96,76 @@ chmod -R 777 uploads
 
 If your podcast player is not showing updated episodes, try refreshing the feed in your podcast player or clearing its cache.
 
+## API Reference
+
+PrivatePod provides a programmatic API for adding episodes from external automation (CI/CD, scripts, cron jobs). A full machine-readable spec is available in [`openapi.yaml`](openapi.yaml).
+
+### Authentication
+
+The programmatic endpoint requires an API key. Set it via environment variable:
+
+```bash
+export PRIVATEPOD_API_KEY=your-secret-key-here
+```
+
+Or in `docker-compose.yml`:
+```yaml
+environment:
+  - PRIVATEPOD_API_KEY=your-secret-key-here
+```
+
+Pass the key in the `X-API-Key` header on every request to `/api/v1/*`.
+
+### POST /api/v1/episodes
+
+Upload an episode programmatically. Accepts multipart form data.
+
+**Fields:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `audio` | file | Yes | MP3 file (max 500MB) |
+| `image` | file | No | Cover art, JPEG or PNG (max 5MB) |
+| `title` | string | No | Episode title (auto-generated from filename if omitted) |
+| `description` | string | No | Episode description |
+| `pubDate` | string | No | Publication date (ISO 8601, defaults to now) |
+
+**Examples:**
+
+Upload with auto-generated title:
+```bash
+curl -X POST http://localhost:3000/api/v1/episodes \
+  -H "X-API-Key: your-secret-key" \
+  -F "audio=@/path/to/episode.mp3"
+```
+
+Upload with metadata and cover art:
+```bash
+curl -X POST http://localhost:3000/api/v1/episodes \
+  -H "X-API-Key: your-secret-key" \
+  -F "audio=@/path/to/episode.mp3" \
+  -F "image=@/path/to/cover.jpg" \
+  -F "title=My Episode Title" \
+  -F "description=Episode description here"
+```
+
+**Error Responses:**
+| Status | Meaning |
+|--------|---------|
+| 400 | No audio file provided |
+| 401 | Missing `X-API-Key` header |
+| 403 | Invalid API key |
+| 503 | `PRIVATEPOD_API_KEY` environment variable not set |
+
+### Other Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/episodes` | List all episodes |
+| DELETE | `/api/episodes/:id` | Delete an episode |
+| GET | `/api/settings` | Get podcast settings |
+| PUT | `/api/settings` | Update podcast settings (JSON body) |
+| GET | `/feed.xml` | RSS podcast feed |
+
 ## License
 
 ISC

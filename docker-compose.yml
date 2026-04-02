@@ -11,4 +11,5 @@ services:
       - ./config:/app/config
     environment:
       - PORT=3000
+      - PRIVATEPOD_API_KEY=  # Set your API key here
     restart: unless-stopped

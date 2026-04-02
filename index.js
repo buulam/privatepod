@@ -4,9 +4,28 @@ const fs = require('fs');
 const path = require('path');
 const xml = require('xml');
 const cors = require('cors');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const PRIVATEPOD_API_KEY = process.env.PRIVATEPOD_API_KEY;
+
+// API key authentication middleware
+function requireApiKey(req, res, next) {
+  if (!PRIVATEPOD_API_KEY) {
+    return res.status(503).json({ error: 'API key not configured' });
+  }
+  const provided = req.headers['x-api-key'];
+  if (!provided) {
+    return res.status(401).json({ error: 'Missing X-API-Key header' });
+  }
+  const expected = Buffer.from(PRIVATEPOD_API_KEY);
+  const actual = Buffer.from(String(provided));
+  if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+    return res.status(403).json({ error: 'Invalid API key' });
+  }
+  next();
+}
 
 // Middleware
 app.use(cors());
@@ -27,11 +46,35 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage: storage,
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'audio/mpeg' || file.mimetype === 'audio/mp3') {
       cb(null, true);
     } else {
       cb(new Error('Only MP3 files are allowed!'), false);
+    }
+  }
+});
+
+// Multer for programmatic endpoint (audio + optional image)
+const programmaticUpload = multer({
+  storage: storage,
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB (per-field limits checked in fileFilter)
+  fileFilter: (req, file, cb) => {
+    if (file.fieldname === 'audio') {
+      if (file.mimetype === 'audio/mpeg' || file.mimetype === 'audio/mp3') {
+        cb(null, true);
+      } else {
+        cb(new Error('Only MP3 files are allowed for audio!'), false);
+      }
+    } else if (file.fieldname === 'image') {
+      if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/png') {
+        cb(null, true);
+      } else {
+        cb(new Error('Only JPEG and PNG files are allowed for images!'), false);
+      }
+    } else {
+      cb(new Error('Unexpected field'), false);
     }
   }
 });
@@ -62,6 +105,25 @@ try {
   fs.writeFileSync('./config/podcast.json', JSON.stringify(podcastConfig, null, 2));
 }
 
+// Helper: create an episode and persist config
+function createEpisode(file, { title, description, pubDate, imageUrl }) {
+  const newEpisode = {
+    id: Date.now().toString(),
+    title,
+    description: description || '',
+    pubDate: pubDate || new Date().toISOString(),
+    audioUrl: `/uploads/${file.filename}`,
+    duration: '00:00:00',
+    fileSize: file.size
+  };
+  if (imageUrl) {
+    newEpisode.imageUrl = imageUrl;
+  }
+  podcastConfig.episodes.push(newEpisode);
+  fs.writeFileSync('./config/podcast.json', JSON.stringify(podcastConfig, null, 2));
+  return newEpisode;
+}
+
 // Routes
 
 // Get podcast feed
@@ -82,34 +144,42 @@ app.get('/api/episodes', (req, res) => {
   res.json(podcastConfig.episodes);
 });
 
-// Add new episode
+// Add new episode (web UI)
 app.post('/api/episodes', upload.single('audio'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No audio file uploaded' });
   }
-  
-  const { title, description, pubDate } = req.body;
-  
-  if (!title) {
+  if (!req.body.title) {
     return res.status(400).json({ error: 'Title is required' });
   }
-  
-  const newEpisode = {
-    id: Date.now().toString(),
+  const episode = createEpisode(req.file, req.body);
+  res.status(201).json(episode);
+});
+
+// Add new episode (programmatic API with auth)
+app.post('/api/v1/episodes', requireApiKey, programmaticUpload.fields([
+  { name: 'audio', maxCount: 1 },
+  { name: 'image', maxCount: 1 }
+]), (req, res) => {
+  const audioFile = req.files && req.files.audio && req.files.audio[0];
+  if (!audioFile) {
+    return res.status(400).json({ error: 'No audio file uploaded' });
+  }
+
+  const title = req.body.title || path.parse(audioFile.originalname).name
+    .replace(/[_-]/g, ' ')
+    .trim();
+
+  const imageFile = req.files.image && req.files.image[0];
+  const imageUrl = imageFile ? `/uploads/${imageFile.filename}` : undefined;
+
+  const episode = createEpisode(audioFile, {
     title,
-    description: description || '',
-    pubDate: pubDate || new Date().toISOString(),
-    audioUrl: `/uploads/${req.file.filename}`,
-    duration: '00:00:00', // In a real app, you'd calculate this from the MP3 file
-    fileSize: req.file.size
-  };
-  
-  podcastConfig.episodes.push(newEpisode);
-  
-  // Save updated config
-  fs.writeFileSync('./config/podcast.json', JSON.stringify(podcastConfig, null, 2));
-  
-  res.status(201).json(newEpisode);
+    description: req.body.description,
+    pubDate: req.body.pubDate,
+    imageUrl
+  });
+  res.status(201).json(episode);
 });
 
 // Delete episode
@@ -130,7 +200,19 @@ app.delete('/api/episodes/:id', (req, res) => {
       fs.unlinkSync(filePath);
     }
   } catch (err) {
-    console.error('Error deleting file:', err);
+    console.error('Error deleting audio file:', err);
+  }
+
+  // Delete the image file if present
+  if (episode.imageUrl) {
+    try {
+      const imgPath = path.join(__dirname, episode.imageUrl);
+      if (fs.existsSync(imgPath)) {
+        fs.unlinkSync(imgPath);
+      }
+    } catch (err) {
+      console.error('Error deleting image file:', err);
+    }
   }
   
   // Remove from episodes array
@@ -140,6 +222,12 @@ app.delete('/api/episodes/:id', (req, res) => {
   fs.writeFileSync('./config/podcast.json', JSON.stringify(podcastConfig, null, 2));
   
   res.json({ success: true });
+});
+
+// Get podcast settings
+app.get('/api/settings', (req, res) => {
+  const { episodes, ...settings } = podcastConfig;
+  res.json(settings);
 });
 
 // Update podcast settings
@@ -172,23 +260,25 @@ function generateRssFeed(config, baseUrl) {
   
   // Format episodes for XML
   const items = episodes.map(episode => {
-    return {
-      item: [
-        { title: episode.title },
-        { description: { _cdata: episode.description } },
-        { pubDate: new Date(episode.pubDate).toUTCString() },
-        { 'itunes:author': author },
-        { 'itunes:subtitle': { _cdata: episode.title } },
-        { 'itunes:summary': { _cdata: episode.description } },
-        { 'itunes:duration': episode.duration },
-        { guid: { _attr: { isPermaLink: 'false' }, _content: episode.id } },
-        { enclosure: { _attr: {
-          url: `${baseUrl}${episode.audioUrl}`,
-          length: episode.fileSize,
-          type: 'audio/mpeg'
-        }}}
-      ]
-    };
+    const itemFields = [
+      { title: episode.title },
+      { description: { _cdata: episode.description } },
+      { pubDate: new Date(episode.pubDate).toUTCString() },
+      { 'itunes:author': author },
+      { 'itunes:subtitle': { _cdata: episode.title } },
+      { 'itunes:summary': { _cdata: episode.description } },
+      { 'itunes:duration': episode.duration },
+      { guid: { _attr: { isPermaLink: 'false' }, _content: episode.id } },
+      { enclosure: { _attr: {
+        url: `${baseUrl}${episode.audioUrl}`,
+        length: episode.fileSize,
+        type: 'audio/mpeg'
+      }}}
+    ];
+    if (episode.imageUrl) {
+      itemFields.push({ 'itunes:image': { _attr: { href: `${baseUrl}${episode.imageUrl}` } } });
+    }
+    return { item: itemFields };
   });
   
   // Build the RSS feed
@@ -226,7 +316,16 @@ app.get('/', (req, res) => {
 });
 
 // Start the server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Podcast feed available at http://localhost:${PORT}/feed.xml`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Podcast feed available at http://localhost:${PORT}/feed.xml`);
+    if (!PRIVATEPOD_API_KEY) {
+      console.warn('WARNING: PRIVATEPOD_API_KEY not set. Programmatic API (POST /api/v1/episodes) is disabled.');
+    } else {
+      console.log('Programmatic API enabled at POST /api/v1/episodes');
+    }
+  });
+}
+
+module.exports = app;
