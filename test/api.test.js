@@ -116,6 +116,17 @@ describe('POST /api/v1/episodes (programmatic)', () => {
     expect(res.body.imageUrl).toMatch(/^\/uploads\/.+\.(jpg|jpeg)$/);
   });
 
+  test('accepts MP3 by file extension even with non-standard MIME type', async () => {
+    const res = await request(app)
+      .post('/api/v1/episodes')
+      .set('X-API-Key', TEST_API_KEY)
+      .field('title', 'Mime Fallback')
+      .attach('audio', mp3Fixture, { filename: 'test.mp3', contentType: 'application/octet-stream' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.title).toBe('Mime Fallback');
+  });
+
   test('returns 400 when no audio file is provided', async () => {
     const res = await request(app)
       .post('/api/v1/episodes')
@@ -124,6 +135,17 @@ describe('POST /api/v1/episodes (programmatic)', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/no audio/i);
+  });
+
+  test('returns JSON error for invalid file type', async () => {
+    const res = await request(app)
+      .post('/api/v1/episodes')
+      .set('X-API-Key', TEST_API_KEY)
+      .attach('audio', jpgFixture, { filename: 'notaudio.txt', contentType: 'text/plain' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBeDefined();
+    expect(res.headers['content-type']).toMatch(/json/);
   });
 });
 

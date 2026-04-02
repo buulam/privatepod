@@ -44,11 +44,21 @@ const storage = multer.diskStorage({
   }
 });
 
+function isMp3(file) {
+  const validMimes = ['audio/mpeg', 'audio/mp3', 'audio/x-mpeg', 'audio/x-mp3'];
+  const ext = path.extname(file.originalname).toLowerCase();
+  return validMimes.includes(file.mimetype) || ext === '.mp3';
+}
+
+function isImage(file) {
+  return file.mimetype === 'image/jpeg' || file.mimetype === 'image/png';
+}
+
 const upload = multer({
   storage: storage,
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'audio/mpeg' || file.mimetype === 'audio/mp3') {
+    if (isMp3(file)) {
       cb(null, true);
     } else {
       cb(new Error('Only MP3 files are allowed!'), false);
@@ -59,16 +69,16 @@ const upload = multer({
 // Multer for programmatic endpoint (audio + optional image)
 const programmaticUpload = multer({
   storage: storage,
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB (per-field limits checked in fileFilter)
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
   fileFilter: (req, file, cb) => {
     if (file.fieldname === 'audio') {
-      if (file.mimetype === 'audio/mpeg' || file.mimetype === 'audio/mp3') {
+      if (isMp3(file)) {
         cb(null, true);
       } else {
         cb(new Error('Only MP3 files are allowed for audio!'), false);
       }
     } else if (file.fieldname === 'image') {
-      if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/png') {
+      if (isImage(file)) {
         cb(null, true);
       } else {
         cb(new Error('Only JPEG and PNG files are allowed for images!'), false);
@@ -313,6 +323,17 @@ function generateRssFeed(config, baseUrl) {
 // Serve the main page
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Error handling for multer and other errors
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ error: err.message });
+  }
+  if (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  next();
 });
 
 // Start the server
