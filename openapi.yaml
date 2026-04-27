@@ -238,6 +238,62 @@ paths:
                 $ref: "#/components/schemas/Error"
 
   /api/episodes/{id}:
+    patch:
+      summary: Update episode
+      description: Partially update an episode. Send any subset of `title`, `description`, `pubDate`, `image`, `removeImage`. Uploading `image` replaces the existing cover (the old file is deleted). Sending `removeImage=true` (without an `image`) clears the cover.
+      operationId: updateEpisode
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Episode ID.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  description: New episode title (must be non-empty if provided).
+                description:
+                  type: string
+                  description: New episode description.
+                pubDate:
+                  type: string
+                  format: date-time
+                  description: New publication date in ISO 8601 format.
+                image:
+                  type: string
+                  format: binary
+                  description: Replacement cover image (image/jpeg or image/png).
+                removeImage:
+                  type: string
+                  enum: ["true", "false"]
+                  description: Set to "true" to remove the existing cover image.
+      responses:
+        "200":
+          description: Updated episode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Episode"
+        "400":
+          description: Invalid input (e.g., empty title, bad file type).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Episode not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
     delete:
       summary: Delete episode
       operationId: deleteEpisode

@@ -235,6 +235,81 @@ describe('GET /api/episodes', () => {
   });
 });
 
+describe('PATCH /api/episodes/:id', () => {
+  async function createEpisode(overrides = {}) {
+    const req = request(app)
+      .post('/api/v1/episodes')
+      .set('X-API-Key', TEST_API_KEY)
+      .field('title', overrides.title || 'Original')
+      .field('description', overrides.description || 'Original desc')
+      .attach('audio', mp3Fixture);
+    if (overrides.image) req.attach('image', jpgFixture);
+    const res = await req;
+    return res.body;
+  }
+
+  test('updates title and description', async () => {
+    const ep = await createEpisode();
+    const res = await request(app)
+      .patch(`/api/episodes/${ep.id}`)
+      .field('title', 'New Title')
+      .field('description', 'New desc');
+
+    expect(res.status).toBe(200);
+    expect(res.body.title).toBe('New Title');
+    expect(res.body.description).toBe('New desc');
+  });
+
+  test('rejects empty title', async () => {
+    const ep = await createEpisode();
+    const res = await request(app)
+      .patch(`/api/episodes/${ep.id}`)
+      .field('title', '   ');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/title/i);
+  });
+
+  test('replaces image and deletes old file', async () => {
+    const ep = await createEpisode({ image: true });
+    const oldPath = path.join(__dirname, '..', ep.imageUrl);
+    expect(fs.existsSync(oldPath)).toBe(true);
+
+    // Ensure the new upload gets a different filename (Date.now()-based)
+    await new Promise(r => setTimeout(r, 5));
+
+    const res = await request(app)
+      .patch(`/api/episodes/${ep.id}`)
+      .attach('image', jpgFixture);
+
+    expect(res.status).toBe(200);
+    expect(res.body.imageUrl).toMatch(/^\/uploads\/.+\.(jpg|jpeg)$/);
+    expect(res.body.imageUrl).not.toBe(ep.imageUrl);
+    expect(fs.existsSync(oldPath)).toBe(false);
+    expect(fs.existsSync(path.join(__dirname, '..', res.body.imageUrl))).toBe(true);
+  });
+
+  test('removes image when removeImage=true', async () => {
+    const ep = await createEpisode({ image: true });
+    const oldPath = path.join(__dirname, '..', ep.imageUrl);
+
+    const res = await request(app)
+      .patch(`/api/episodes/${ep.id}`)
+      .field('removeImage', 'true');
+
+    expect(res.status).toBe(200);
+    expect(res.body.imageUrl).toBeUndefined();
+    expect(fs.existsSync(oldPath)).toBe(false);
+  });
+
+  test('returns 404 for unknown episode', async () => {
+    const res = await request(app)
+      .patch('/api/episodes/nonexistent')
+      .field('title', 'x');
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('DELETE /api/episodes/:id', () => {
   test('deletes episode and its files', async () => {
     const createRes = await request(app)

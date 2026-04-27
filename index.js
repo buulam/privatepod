@@ -197,6 +197,46 @@ app.post('/api/v1/episodes', requireApiKey, audioImageUpload.fields([
   res.status(201).json(episode);
 });
 
+// Update episode (title, description, pubDate, image)
+app.patch('/api/episodes/:id', audioImageUpload.single('image'), (req, res) => {
+  const episode = podcastConfig.episodes.find(ep => ep.id === req.params.id);
+  if (!episode) {
+    return res.status(404).json({ error: 'Episode not found' });
+  }
+
+  if (req.body.title !== undefined) {
+    if (!req.body.title.trim()) {
+      return res.status(400).json({ error: 'Title cannot be empty' });
+    }
+    episode.title = req.body.title;
+  }
+  if (req.body.description !== undefined) {
+    episode.description = req.body.description;
+  }
+  if (req.body.pubDate !== undefined && req.body.pubDate.trim()) {
+    episode.pubDate = req.body.pubDate;
+  }
+
+  const replacingImage = !!req.file;
+  const removingImage = req.body.removeImage === 'true';
+  if ((replacingImage || removingImage) && episode.imageUrl) {
+    try {
+      const oldPath = path.join(__dirname, episode.imageUrl);
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+    } catch (err) {
+      console.error('Error deleting old image file:', err);
+    }
+  }
+  if (replacingImage) {
+    episode.imageUrl = `/uploads/${req.file.filename}`;
+  } else if (removingImage) {
+    delete episode.imageUrl;
+  }
+
+  fs.writeFileSync('./config/podcast.json', JSON.stringify(podcastConfig, null, 2));
+  res.json(episode);
+});
+
 // Delete episode
 app.delete('/api/episodes/:id', (req, res) => {
   const episodeId = req.params.id;

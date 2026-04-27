@@ -109,6 +109,17 @@
     .delete-btn:hover {
       background-color: #c0392b;
     }
+    .cancel-btn {
+      background-color: #95a5a6;
+    }
+    .cancel-btn:hover {
+      background-color: #7f8c8d;
+    }
+    .episode-edit {
+      border-top: 1px solid #eee;
+      margin-top: 10px;
+      padding-top: 10px;
+    }
     .feed-url {
       padding: 10px;
       background-color: #ecf0f1;
@@ -283,28 +294,94 @@
           const episodeEl = document.createElement('div');
           episodeEl.className = 'episode';
           episodeEl.innerHTML = `
-            <div class="episode-content">
-              ${episode.imageUrl ? `<img src="${episode.imageUrl}" alt="" class="episode-cover">` : ''}
-              <div class="episode-body">
-                <div class="episode-title">${episode.title}</div>
-                <div class="episode-date">Published: ${date}</div>
-                <div>${episode.description || 'No description'}</div>
+            <div class="episode-view">
+              <div class="episode-content">
+                ${episode.imageUrl ? `<img src="${episode.imageUrl}" alt="" class="episode-cover">` : ''}
+                <div class="episode-body">
+                  <div class="episode-title"></div>
+                  <div class="episode-date">Published: ${date}</div>
+                  <div class="episode-desc"></div>
+                </div>
+              </div>
+              <audio controls src="${episode.audioUrl}" style="width: 100%; margin-top: 10px;"></audio>
+              <div class="episode-actions">
+                <button class="edit-btn">Edit</button>
+                <button class="delete-btn">Delete</button>
               </div>
             </div>
-            <audio controls src="${episode.audioUrl}" style="width: 100%; margin-top: 10px;"></audio>
-            <div class="episode-actions">
-              <button class="delete-btn" data-id="${episode.id}">Delete</button>
-            </div>
+            <form class="episode-edit" hidden>
+              <div class="form-group">
+                <label>Title *</label>
+                <input type="text" name="title" required>
+              </div>
+              <div class="form-group">
+                <label>Description</label>
+                <textarea name="description" rows="3"></textarea>
+              </div>
+              <div class="form-group">
+                <label>Publication Date (ISO 8601)</label>
+                <input type="text" name="pubDate">
+              </div>
+              <div class="form-group">
+                <label>Replace Cover Image (optional, JPEG or PNG)</label>
+                <input type="file" name="image" accept="image/jpeg,image/png">
+                ${episode.imageUrl ? `<label style="display: block; margin-top: 8px; font-weight: normal;"><input type="checkbox" name="removeImage"> Remove existing cover image</label>` : ''}
+              </div>
+              <button type="submit">Save</button>
+              <button type="button" class="cancel-btn cancel-edit-btn" style="margin-left: 8px;">Cancel</button>
+              <span class="edit-status" style="margin-left: 12px;"></span>
+            </form>
           `;
-          episodesList.appendChild(episodeEl);
-        });
-        
-        // Add event listeners to delete buttons
-        document.querySelectorAll('.delete-btn').forEach(btn => {
-          btn.addEventListener('click', async () => {
+
+          // Set user-controlled values via DOM to avoid HTML/attribute injection
+          episodeEl.querySelector('.episode-title').textContent = episode.title;
+          episodeEl.querySelector('.episode-desc').textContent = episode.description || 'No description';
+          episodeEl.querySelector('input[name="title"]').value = episode.title;
+          episodeEl.querySelector('textarea[name="description"]').value = episode.description || '';
+          episodeEl.querySelector('input[name="pubDate"]').value = episode.pubDate;
+
+          const view = episodeEl.querySelector('.episode-view');
+          const editForm = episodeEl.querySelector('.episode-edit');
+          const editStatus = episodeEl.querySelector('.edit-status');
+
+          episodeEl.querySelector('.edit-btn').addEventListener('click', () => {
+            view.hidden = true;
+            editForm.hidden = false;
+          });
+          episodeEl.querySelector('.cancel-edit-btn').addEventListener('click', () => {
+            editForm.reset();
+            editStatus.textContent = '';
+            editForm.hidden = true;
+            view.hidden = false;
+          });
+          episodeEl.querySelector('.delete-btn').addEventListener('click', async () => {
             if (confirm('Are you sure you want to delete this episode?')) {
-              const id = btn.dataset.id;
-              await deleteEpisode(id);
+              await deleteEpisode(episode.id);
+            }
+          });
+          editForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            editStatus.textContent = 'Saving...';
+            editStatus.style.color = '';
+            const fd = new FormData(editForm);
+            // FormData omits unchecked checkboxes; normalize removeImage to a string
+            fd.set('removeImage', editForm.removeImage && editForm.removeImage.checked ? 'true' : 'false');
+            try {
+              const response = await fetch(`${API_BASE_URL}/api/episodes/${episode.id}`, {
+                method: 'PATCH',
+                body: fd
+              });
+              if (response.ok) {
+                loadEpisodes();
+              } else {
+                const error = await response.json();
+                editStatus.textContent = `Error: ${error.error || 'Failed to save'}`;
+                editStatus.style.color = 'red';
+              }
+            } catch (err) {
+              console.error('Error saving episode:', err);
+              editStatus.textContent = 'Error saving episode';
+              editStatus.style.color = 'red';
             }
           });
         });
