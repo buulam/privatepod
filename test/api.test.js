@@ -414,6 +414,18 @@ describe('GET /feed.xml', () => {
     expect(res.text).toMatch(/<enclosure url="https?:\/\/[^"]+\.mp3"/);
   });
 
+  test('emits non-empty <guid> with episode id', async () => {
+    const create = await request(app)
+      .post('/api/v1/episodes')
+      .set('X-API-Key', TEST_API_KEY)
+      .field('title', 'Guid Test')
+      .attach('audio', mp3Fixture);
+
+    const res = await request(app).get('/feed.xml');
+    expect(res.text).not.toMatch(/<guid[^>]*\/>/); // no self-closing empty guid
+    expect(res.text).toContain(`>${create.body.id}</guid>`);
+  });
+
   test('PRIVATEPOD_PUBLIC_URL overrides request-derived baseUrl', async () => {
     process.env.PRIVATEPOD_PUBLIC_URL = 'https://podcast.example.com';
     const overriddenApp = loadApp();

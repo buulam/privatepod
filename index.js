@@ -351,17 +351,19 @@ function generateRssFeed(config, baseUrl) {
       { 'itunes:author': author },
       { 'itunes:subtitle': { _cdata: episode.title } },
       { 'itunes:summary': { _cdata: episode.description } },
-      { 'itunes:duration': episode.duration },
-      { guid: { _attr: { isPermaLink: 'false' }, _content: episode.id } },
+      { 'itunes:duration': episode.duration }
+    ];
+    if (episode.imageUrl) {
+      itemFields.push({ 'itunes:image': { _attr: { href: absoluteUrl(episode.imageUrl, baseUrl) } } });
+    }
+    itemFields.push(
+      { guid: [{ _attr: { isPermaLink: 'false' } }, episode.id] },
       { enclosure: { _attr: {
         url: absoluteUrl(episode.audioUrl, baseUrl),
         length: episode.fileSize,
         type: 'audio/mpeg'
       }}}
-    ];
-    if (episode.imageUrl) {
-      itemFields.push({ 'itunes:image': { _attr: { href: absoluteUrl(episode.imageUrl, baseUrl) } } });
-    }
+    );
     return { item: itemFields };
   });
 
