@@ -60,20 +60,8 @@ function isImage(file) {
   return file.mimetype === 'image/jpeg' || file.mimetype === 'image/png';
 }
 
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
-  fileFilter: (req, file, cb) => {
-    if (isMp3(file)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only MP3 files are allowed!'), false);
-    }
-  }
-});
-
-// Multer for programmatic endpoint (audio + optional image)
-const programmaticUpload = multer({
+// Multer for audio + optional image (used by web UI and programmatic routes)
+const audioImageUpload = multer({
   storage: storage,
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
   fileFilter: (req, file, cb) => {
@@ -161,19 +149,30 @@ app.get('/api/episodes', (req, res) => {
 });
 
 // Add new episode (web UI)
-app.post('/api/episodes', upload.single('audio'), (req, res) => {
-  if (!req.file) {
+app.post('/api/episodes', audioImageUpload.fields([
+  { name: 'audio', maxCount: 1 },
+  { name: 'image', maxCount: 1 }
+]), (req, res) => {
+  const audioFile = req.files && req.files.audio && req.files.audio[0];
+  if (!audioFile) {
     return res.status(400).json({ error: 'No audio file uploaded' });
   }
   if (!req.body.title) {
     return res.status(400).json({ error: 'Title is required' });
   }
-  const episode = createEpisode(req.file, req.body);
+  const imageFile = req.files.image && req.files.image[0];
+  const imageUrl = imageFile ? `/uploads/${imageFile.filename}` : undefined;
+  const episode = createEpisode(audioFile, {
+    title: req.body.title,
+    description: req.body.description,
+    pubDate: req.body.pubDate,
+    imageUrl
+  });
   res.status(201).json(episode);
 });
 
 // Add new episode (programmatic API with auth)
-app.post('/api/v1/episodes', requireApiKey, programmaticUpload.fields([
+app.post('/api/v1/episodes', requireApiKey, audioImageUpload.fields([
   { name: 'audio', maxCount: 1 },
   { name: 'image', maxCount: 1 }
 ]), (req, res) => {
@@ -242,6 +241,17 @@ app.delete('/api/episodes/:id', (req, res) => {
 
 // Get podcast settings
 app.get('/api/settings', (req, res) => {
+  const { episodes, ...settings } = podcastConfig;
+  res.json(settings);
+});
+
+// Upload podcast cover image
+app.post('/api/settings/image', audioImageUpload.single('image'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No image file uploaded' });
+  }
+  podcastConfig.imageUrl = `/uploads/${req.file.filename}`;
+  fs.writeFileSync('./config/podcast.json', JSON.stringify(podcastConfig, null, 2));
   const { episodes, ...settings } = podcastConfig;
   res.json(settings);
 });

@@ -168,6 +168,50 @@ describe('POST /api/episodes (web UI)', () => {
     expect(res.status).toBe(201);
     expect(res.body.title).toBe('UI Episode');
   });
+
+  test('accepts optional cover image', async () => {
+    const res = await request(app)
+      .post('/api/episodes')
+      .field('title', 'UI Episode with Art')
+      .attach('audio', mp3Fixture)
+      .attach('image', jpgFixture);
+
+    expect(res.status).toBe(201);
+    expect(res.body.imageUrl).toMatch(/^\/uploads\/.+\.(jpg|jpeg)$/);
+  });
+});
+
+describe('POST /api/settings/image', () => {
+  test('uploads a cover image and updates settings.imageUrl', async () => {
+    const res = await request(app)
+      .post('/api/settings/image')
+      .attach('image', jpgFixture);
+
+    expect(res.status).toBe(200);
+    expect(res.body.imageUrl).toMatch(/^\/uploads\/.+\.(jpg|jpeg)$/);
+    expect(res.body.episodes).toBeUndefined();
+
+    const file = path.join(__dirname, '..', res.body.imageUrl);
+    expect(fs.existsSync(file)).toBe(true);
+
+    const settings = await request(app).get('/api/settings');
+    expect(settings.body.imageUrl).toBe(res.body.imageUrl);
+  });
+
+  test('returns 400 when no image is provided', async () => {
+    const res = await request(app).post('/api/settings/image');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/no image/i);
+  });
+
+  test('rejects non-image file types', async () => {
+    const res = await request(app)
+      .post('/api/settings/image')
+      .attach('image', mp3Fixture);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBeDefined();
+  });
 });
 
 describe('GET /api/episodes', () => {

@@ -209,6 +209,10 @@ paths:
                   type: string
                   format: binary
                   description: MP3 audio file (audio/mpeg).
+                image:
+                  type: string
+                  format: binary
+                  description: Optional cover image (image/jpeg or image/png).
                 title:
                   type: string
                   description: Episode title.
@@ -311,6 +315,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FullConfig"
+
+  /api/settings/image:
+    post:
+      summary: Upload podcast cover image
+      description: Upload a JPEG or PNG to use as the show-level cover image. The path is stored in the podcast settings as `imageUrl`.
+      operationId: uploadSettingsImage
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: Cover image (image/jpeg or image/png).
+      responses:
+        "200":
+          description: Updated settings with new imageUrl.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+        "400":
+          description: Missing image or invalid file type.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /feed.xml:
     get:

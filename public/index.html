@@ -77,6 +77,32 @@
     .episode-actions {
       margin-top: 10px;
     }
+    .episode-content {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .episode-cover {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .episode-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .cover-preview {
+      max-width: 200px;
+      max-height: 200px;
+      border-radius: 4px;
+      display: block;
+    }
+    .muted {
+      color: #7f8c8d;
+      font-style: italic;
+    }
     .delete-btn {
       background-color: #e74c3c;
     }
@@ -156,6 +182,10 @@
         <label for="audio">Audio File (MP3) *</label>
         <input type="file" id="audio" name="audio" accept="audio/mpeg,audio/mp3" required>
       </div>
+      <div class="form-group">
+        <label for="image">Cover Image (optional, JPEG or PNG)</label>
+        <input type="file" id="image" name="image" accept="image/jpeg,image/png">
+      </div>
       <button type="submit">Upload Episode</button>
     </form>
     <div id="upload-status"></div>
@@ -194,6 +224,16 @@
       </div>
       <button type="submit">Save Settings</button>
     </form>
+
+    <h3 style="margin-top: 24px;">Cover Image</h3>
+    <div class="form-group">
+      <div id="settings-image-preview"></div>
+    </div>
+    <div class="form-group">
+      <label for="podcast-image-file">Upload New Cover Image (JPEG or PNG)</label>
+      <input type="file" id="podcast-image-file" accept="image/jpeg,image/png">
+      <button type="button" id="upload-image-btn" style="margin-top: 8px;">Upload Cover Image</button>
+    </div>
     <div id="settings-status"></div>
   </div>
 
@@ -243,9 +283,14 @@
           const episodeEl = document.createElement('div');
           episodeEl.className = 'episode';
           episodeEl.innerHTML = `
-            <div class="episode-title">${episode.title}</div>
-            <div class="episode-date">Published: ${date}</div>
-            <div>${episode.description || 'No description'}</div>
+            <div class="episode-content">
+              ${episode.imageUrl ? `<img src="${episode.imageUrl}" alt="" class="episode-cover">` : ''}
+              <div class="episode-body">
+                <div class="episode-title">${episode.title}</div>
+                <div class="episode-date">Published: ${date}</div>
+                <div>${episode.description || 'No description'}</div>
+              </div>
+            </div>
             <audio controls src="${episode.audioUrl}" style="width: 100%; margin-top: 10px;"></audio>
             <div class="episode-actions">
               <button class="delete-btn" data-id="${episode.id}">Delete</button>
@@ -336,10 +381,47 @@
         document.getElementById('podcast-language').value = podcastSettings.language || '';
         document.getElementById('podcast-category').value = podcastSettings.category || '';
         document.getElementById('podcast-image').value = podcastSettings.imageUrl || '';
+
+        const previewEl = document.getElementById('settings-image-preview');
+        if (podcastSettings.imageUrl) {
+          previewEl.innerHTML = `<img src="${podcastSettings.imageUrl}" alt="Cover" class="cover-preview">`;
+        } else {
+          previewEl.innerHTML = '<span class="muted">No cover image set</span>';
+        }
       } catch (error) {
         console.error('Error loading settings:', error);
       }
     }
+
+    // Upload podcast cover image
+    document.getElementById('upload-image-btn').addEventListener('click', async () => {
+      const fileInput = document.getElementById('podcast-image-file');
+      const file = fileInput.files[0];
+      if (!file) {
+        settingsStatus.innerHTML = '<p style="color: red;">Select an image file first</p>';
+        return;
+      }
+      const fd = new FormData();
+      fd.append('image', file);
+      settingsStatus.innerHTML = '<p>Uploading cover image...</p>';
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/settings/image`, {
+          method: 'POST',
+          body: fd
+        });
+        if (response.ok) {
+          settingsStatus.innerHTML = '<p style="color: green;">Cover image uploaded!</p>';
+          fileInput.value = '';
+          loadSettings();
+        } else {
+          const error = await response.json();
+          settingsStatus.innerHTML = `<p style="color: red;">Error: ${error.error || 'Failed to upload image'}</p>`;
+        }
+      } catch (err) {
+        console.error('Error uploading cover image:', err);
+        settingsStatus.innerHTML = '<p style="color: red;">Error uploading cover image</p>';
+      }
+    });
     
     // Save podcast settings
     settingsForm.addEventListener('submit', async (e) => {
