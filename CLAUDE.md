@@ -55,11 +55,13 @@ This is a single-file Express 5 app (`index.js`) with a vanilla HTML/JS frontend
 - `config/podcast.json` — podcast metadata + episodes array (gitignored)
 - `uploads/` — MP3 and image files (gitignored)
 - Both directories use `.gitkeep` to preserve structure in git
+- `PRIVATEPOD_DATA_DIR` env var overrides where these live (defaults to project root). All file I/O — multer uploads, config reads/writes, episode-asset deletes — is rooted under it.
 
 **Testing:**
 - Jest + supertest integration tests in `test/api.test.js`
 - Fixture files in `test/fixtures/` (minimal valid MP3 and JPEG)
 - Tests use `jest.resetModules()` in `beforeEach` to get a fresh app instance per test
+- Tests set `PRIVATEPOD_DATA_DIR` to a real OS temp dir (`fs.mkdtempSync(os.tmpdir() + ...)`) so they never touch the project's `uploads/` or `config/`. Always preserve this isolation when editing tests — earlier versions wiped real user data because they pointed at the project dirs.
 
 **Docker:**
 - `Dockerfile` uses `npm ci --omit=dev` — only production dependencies in the image

@@ -12,6 +12,16 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const PRIVATEPOD_API_KEY = process.env.PRIVATEPOD_API_KEY;
 
+// All persistent data (config + uploads) lives under DATA_DIR. Defaults to the
+// project root for backward compatibility; override with PRIVATEPOD_DATA_DIR
+// (e.g. tests, Docker volume mounts).
+const DATA_DIR = process.env.PRIVATEPOD_DATA_DIR || __dirname;
+const CONFIG_DIR = path.join(DATA_DIR, 'config');
+const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+const CONFIG_FILE = path.join(CONFIG_DIR, 'podcast.json');
+fs.mkdirSync(CONFIG_DIR, { recursive: true });
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
 // API key authentication middleware
 function requireApiKey(req, res, next) {
   if (!PRIVATEPOD_API_KEY) {
@@ -34,7 +44,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(UPLOADS_DIR));
 
 // Swagger API docs
 const swaggerDocument = YAML.load(path.join(__dirname, 'openapi.yaml'));
@@ -43,7 +53,7 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 // Set up multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    cb(null, UPLOADS_DIR);
   },
   filename: (req, file, cb) => {
     cb(null, Date.now() + path.extname(file.originalname));
@@ -84,9 +94,9 @@ const audioImageUpload = multer({
 });
 
 // Load podcast configuration
-let podcastConfig = {};
+let podcastConfig;
 try {
-  podcastConfig = require('./config/podcast.json');
+  podcastConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
 } catch (err) {
   // Create default config if it doesn't exist
   podcastConfig = {
@@ -101,12 +111,7 @@ try {
     category: 'Technology',
     episodes: []
   };
-  
-  // Save default config
-  if (!fs.existsSync('./config')) {
-    fs.mkdirSync('./config');
-  }
-  fs.writeFileSync('./config/podcast.json', JSON.stringify(podcastConfig, null, 2));
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(podcastConfig, null, 2));
 }
 
 // Helper: create an episode and persist config
@@ -124,7 +129,7 @@ function createEpisode(file, { title, description, pubDate, imageUrl }) {
     newEpisode.imageUrl = imageUrl;
   }
   podcastConfig.episodes.push(newEpisode);
-  fs.writeFileSync('./config/podcast.json', JSON.stringify(podcastConfig, null, 2));
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(podcastConfig, null, 2));
   return newEpisode;
 }
 
@@ -221,7 +226,7 @@ app.patch('/api/episodes/:id', audioImageUpload.single('image'), (req, res) => {
   const removingImage = req.body.removeImage === 'true';
   if ((replacingImage || removingImage) && episode.imageUrl) {
     try {
-      const oldPath = path.join(__dirname, episode.imageUrl);
+      const oldPath = path.join(DATA_DIR, episode.imageUrl);
       if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
     } catch (err) {
       console.error('Error deleting old image file:', err);
@@ -233,7 +238,7 @@ app.patch('/api/episodes/:id', audioImageUpload.single('image'), (req, res) => {
     delete episode.imageUrl;
   }
 
-  fs.writeFileSync('./config/podcast.json', JSON.stringify(podcastConfig, null, 2));
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(podcastConfig, null, 2));
   res.json(episode);
 });
 
@@ -250,7 +255,7 @@ app.delete('/api/episodes/:id', (req, res) => {
   
   // Delete the audio file
   try {
-    const filePath = path.join(__dirname, episode.audioUrl);
+    const filePath = path.join(DATA_DIR, episode.audioUrl);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
@@ -261,7 +266,7 @@ app.delete('/api/episodes/:id', (req, res) => {
   // Delete the image file if present
   if (episode.imageUrl) {
     try {
-      const imgPath = path.join(__dirname, episode.imageUrl);
+      const imgPath = path.join(DATA_DIR, episode.imageUrl);
       if (fs.existsSync(imgPath)) {
         fs.unlinkSync(imgPath);
       }
@@ -274,7 +279,7 @@ app.delete('/api/episodes/:id', (req, res) => {
   podcastConfig.episodes.splice(episodeIndex, 1);
   
   // Save updated config
-  fs.writeFileSync('./config/podcast.json', JSON.stringify(podcastConfig, null, 2));
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(podcastConfig, null, 2));
   
   res.json({ success: true });
 });
@@ -291,7 +296,7 @@ app.post('/api/settings/image', audioImageUpload.single('image'), (req, res) => 
     return res.status(400).json({ error: 'No image file uploaded' });
   }
   podcastConfig.imageUrl = `/uploads/${req.file.filename}`;
-  fs.writeFileSync('./config/podcast.json', JSON.stringify(podcastConfig, null, 2));
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(podcastConfig, null, 2));
   const { episodes, ...settings } = podcastConfig;
   res.json(settings);
 });
@@ -315,7 +320,7 @@ app.put('/api/settings', (req, res) => {
   };
   
   // Save updated config
-  fs.writeFileSync('./config/podcast.json', JSON.stringify(podcastConfig, null, 2));
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(podcastConfig, null, 2));
   
   res.json(podcastConfig);
 });

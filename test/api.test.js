@@ -1,5 +1,6 @@
 const request = require('supertest');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const TEST_API_KEY = 'test-secret-key-123';
@@ -7,10 +8,9 @@ const fixturesDir = path.join(__dirname, 'fixtures');
 const mp3Fixture = path.join(fixturesDir, 'test.mp3');
 const jpgFixture = path.join(fixturesDir, 'test.jpg');
 
-// Temp directories for test isolation
-const tmpUploads = path.join(__dirname, '..', 'uploads');
-const tmpConfig = path.join(__dirname, '..', 'config');
-
+// Real OS temp dir, isolated from the project's uploads/ and config/.
+// PRIVATEPOD_DATA_DIR tells the app to read/write here instead of __dirname.
+let dataDir;
 let app;
 
 function loadApp() {
@@ -18,12 +18,18 @@ function loadApp() {
   return require('../index');
 }
 
+beforeAll(() => {
+  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'privatepod-test-'));
+  process.env.PRIVATEPOD_DATA_DIR = dataDir;
+});
+
+afterAll(() => {
+  fs.rmSync(dataDir, { recursive: true, force: true });
+});
+
 beforeEach(() => {
-  // Ensure directories exist and clean config so app starts fresh
-  fs.mkdirSync(tmpUploads, { recursive: true });
-  fs.mkdirSync(tmpConfig, { recursive: true });
   // Remove any existing config so the app creates a fresh default
-  const configPath = path.join(tmpConfig, 'podcast.json');
+  const configPath = path.join(dataDir, 'config', 'podcast.json');
   if (fs.existsSync(configPath)) fs.unlinkSync(configPath);
 
   // Set API key env var before loading the app
@@ -32,19 +38,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // Clean up uploaded files (but keep directories and .gitkeep)
-  const cleanDir = (dir) => {
-    if (!fs.existsSync(dir)) return;
-    for (const file of fs.readdirSync(dir)) {
-      if (file === '.gitkeep') continue;
-      const filePath = path.join(dir, file);
-      if (fs.statSync(filePath).isFile()) {
-        fs.unlinkSync(filePath);
-      }
-    }
-  };
-  cleanDir(tmpUploads);
-  cleanDir(tmpConfig);
+  // Clean up uploaded files between tests so paths don't collide
+  const uploads = path.join(dataDir, 'uploads');
+  if (!fs.existsSync(uploads)) return;
+  for (const file of fs.readdirSync(uploads)) {
+    fs.unlinkSync(path.join(uploads, file));
+  }
 });
 
 describe('API Key Authentication', () => {
@@ -191,7 +190,7 @@ describe('POST /api/settings/image', () => {
     expect(res.body.imageUrl).toMatch(/^\/uploads\/.+\.(jpg|jpeg)$/);
     expect(res.body.episodes).toBeUndefined();
 
-    const file = path.join(__dirname, '..', res.body.imageUrl);
+    const file = path.join(dataDir, res.body.imageUrl);
     expect(fs.existsSync(file)).toBe(true);
 
     const settings = await request(app).get('/api/settings');
@@ -272,7 +271,7 @@ describe('PATCH /api/episodes/:id', () => {
 
   test('replaces image and deletes old file', async () => {
     const ep = await createEpisode({ image: true });
-    const oldPath = path.join(__dirname, '..', ep.imageUrl);
+    const oldPath = path.join(dataDir, ep.imageUrl);
     expect(fs.existsSync(oldPath)).toBe(true);
 
     // Ensure the new upload gets a different filename (Date.now()-based)
@@ -286,12 +285,12 @@ describe('PATCH /api/episodes/:id', () => {
     expect(res.body.imageUrl).toMatch(/^\/uploads\/.+\.(jpg|jpeg)$/);
     expect(res.body.imageUrl).not.toBe(ep.imageUrl);
     expect(fs.existsSync(oldPath)).toBe(false);
-    expect(fs.existsSync(path.join(__dirname, '..', res.body.imageUrl))).toBe(true);
+    expect(fs.existsSync(path.join(dataDir, res.body.imageUrl))).toBe(true);
   });
 
   test('removes image when removeImage=true', async () => {
     const ep = await createEpisode({ image: true });
-    const oldPath = path.join(__dirname, '..', ep.imageUrl);
+    const oldPath = path.join(dataDir, ep.imageUrl);
 
     const res = await request(app)
       .patch(`/api/episodes/${ep.id}`)
@@ -320,8 +319,8 @@ describe('DELETE /api/episodes/:id', () => {
       .attach('image', jpgFixture);
 
     const episodeId = createRes.body.id;
-    const audioPath = path.join(__dirname, '..', createRes.body.audioUrl);
-    const imagePath = path.join(__dirname, '..', createRes.body.imageUrl);
+    const audioPath = path.join(dataDir, createRes.body.audioUrl);
+    const imagePath = path.join(dataDir, createRes.body.imageUrl);
 
     expect(fs.existsSync(audioPath)).toBe(true);
     expect(fs.existsSync(imagePath)).toBe(true);
