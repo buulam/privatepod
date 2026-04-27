@@ -387,4 +387,48 @@ describe('GET /feed.xml', () => {
     expect(res.text).toContain('Feed Episode');
     expect(res.text).toContain('itunes:image');
   });
+
+  test('emits absolute itunes:image URLs (channel + episode) and itunes:explicit', async () => {
+    // Settings cover stored as a relative /uploads/... path (UI-uploaded case)
+    await request(app)
+      .post('/api/settings/image')
+      .attach('image', jpgFixture);
+
+    await request(app)
+      .post('/api/v1/episodes')
+      .set('X-API-Key', TEST_API_KEY)
+      .field('title', 'Cover Test')
+      .attach('audio', mp3Fixture)
+      .attach('image', jpgFixture);
+
+    const res = await request(app).get('/feed.xml');
+    // No itunes:image href should be a bare /uploads/... path
+    expect(res.text).not.toMatch(/<itunes:image href="\/uploads/);
+    // Both channel + episode covers must be absolute http(s) URLs
+    const matches = res.text.match(/<itunes:image href="([^"]+)"/g) || [];
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+    matches.forEach(m => expect(m).toMatch(/href="https?:\/\//));
+    // Apple-required channel-level explicit tag
+    expect(res.text).toContain('<itunes:explicit>false</itunes:explicit>');
+    // Audio enclosure URL also absolute
+    expect(res.text).toMatch(/<enclosure url="https?:\/\/[^"]+\.mp3"/);
+  });
+
+  test('PRIVATEPOD_PUBLIC_URL overrides request-derived baseUrl', async () => {
+    process.env.PRIVATEPOD_PUBLIC_URL = 'https://podcast.example.com';
+    const overriddenApp = loadApp();
+    try {
+      await request(overriddenApp)
+        .post('/api/v1/episodes')
+        .set('X-API-Key', TEST_API_KEY)
+        .field('title', 'Override Test')
+        .attach('audio', mp3Fixture);
+
+      const res = await request(overriddenApp).get('/feed.xml');
+      expect(res.text).toContain('https://podcast.example.com/uploads/');
+      expect(res.text).not.toContain('http://127.0.0.1');
+    } finally {
+      delete process.env.PRIVATEPOD_PUBLIC_URL;
+    }
+  });
 });

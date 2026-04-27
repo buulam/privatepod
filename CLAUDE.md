@@ -47,6 +47,11 @@ This is a single-file Express 5 app (`index.js`) with a vanilla HTML/JS frontend
 - API key set via `PRIVATEPOD_API_KEY` env var, compared with timing-safe equality
 - Returns 503 if env var not configured, 401 if header missing, 403 if key wrong
 
+**Public URL resolution (RSS feed):**
+- `PRIVATEPOD_PUBLIC_URL` env var, when set, is used as the absolute baseUrl for every URL in `/feed.xml` (audio enclosures, channel + episode `<itunes:image>`). Required for production behind a reverse proxy or any time the public hostname differs from what the app sees.
+- When unset, baseUrl is derived from `req.protocol` + `req.get('host')`. The app sets `app.set('trust proxy', true)` so `X-Forwarded-Proto`/`X-Forwarded-Host` from a reverse proxy are honored.
+- All `<itunes:image>` hrefs are normalized to absolute URLs via `absoluteUrl()` — Apple Podcasts rejects relative paths.
+
 **API Documentation:**
 - `openapi.yaml` — OpenAPI 3.0 spec for all endpoints
 - `README.md` — API Reference section with curl examples

@@ -11,6 +11,13 @@ const YAML = require('yamljs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const PRIVATEPOD_API_KEY = process.env.PRIVATEPOD_API_KEY;
+// Public URL the feed uses for absolute audio/image URLs. If unset, the app
+// falls back to the request's scheme+host (with `trust proxy` enabled so
+// X-Forwarded-Proto/Host work behind nginx, Caddy, Cloudflare, etc.).
+const PRIVATEPOD_PUBLIC_URL = process.env.PRIVATEPOD_PUBLIC_URL
+  ? process.env.PRIVATEPOD_PUBLIC_URL.replace(/\/$/, '')
+  : null;
+app.set('trust proxy', true);
 
 // All persistent data (config + uploads) lives under DATA_DIR. Defaults to the
 // project root for backward compatibility; override with PRIVATEPOD_DATA_DIR
@@ -137,13 +144,11 @@ function createEpisode(file, { title, description, pubDate, imageUrl }) {
 
 // Get podcast feed
 app.get('/feed.xml', (req, res) => {
-  const host = req.get('host');
-  const protocol = req.protocol;
-  const baseUrl = `${protocol}://${host}`;
-  
+  const baseUrl = PRIVATEPOD_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+
   // Generate RSS feed
   const rssFeed = generateRssFeed(podcastConfig, baseUrl);
-  
+
   res.set('Content-Type', 'application/rss+xml');
   res.send(rssFeed);
 });
@@ -325,10 +330,18 @@ app.put('/api/settings', (req, res) => {
   res.json(podcastConfig);
 });
 
+// Resolve a stored image/audio URL to an absolute URL Apple Podcasts can fetch.
+// Already-absolute URLs pass through; relative paths get prefixed with baseUrl.
+function absoluteUrl(url, baseUrl) {
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${baseUrl}${url}`;
+}
+
 // Function to generate RSS feed
 function generateRssFeed(config, baseUrl) {
   const { title, description, author, email, language, copyright, link, imageUrl, category, episodes } = config;
-  
+
   // Format episodes for XML
   const items = episodes.map(episode => {
     const itemFields = [
@@ -341,17 +354,17 @@ function generateRssFeed(config, baseUrl) {
       { 'itunes:duration': episode.duration },
       { guid: { _attr: { isPermaLink: 'false' }, _content: episode.id } },
       { enclosure: { _attr: {
-        url: `${baseUrl}${episode.audioUrl}`,
+        url: absoluteUrl(episode.audioUrl, baseUrl),
         length: episode.fileSize,
         type: 'audio/mpeg'
       }}}
     ];
     if (episode.imageUrl) {
-      itemFields.push({ 'itunes:image': { _attr: { href: `${baseUrl}${episode.imageUrl}` } } });
+      itemFields.push({ 'itunes:image': { _attr: { href: absoluteUrl(episode.imageUrl, baseUrl) } } });
     }
     return { item: itemFields };
   });
-  
+
   // Build the RSS feed
   const feed = [
     { _attr: {
@@ -368,16 +381,17 @@ function generateRssFeed(config, baseUrl) {
       { lastBuildDate: new Date().toUTCString() },
       { 'itunes:author': author },
       { 'itunes:summary': description },
+      { 'itunes:explicit': 'false' },
       { 'itunes:owner': [
         { 'itunes:name': author },
         { 'itunes:email': email }
       ]},
-      { 'itunes:image': { _attr: { href: imageUrl } } },
+      { 'itunes:image': { _attr: { href: absoluteUrl(imageUrl, baseUrl) } } },
       { 'itunes:category': { _attr: { text: category } } },
       ...items
     ]}
   ];
-  
+
   return '<?xml version="1.0" encoding="UTF-8"?>\n' + xml({ rss: feed }, { declaration: false });
 }
 
